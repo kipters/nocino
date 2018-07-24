@@ -6,24 +6,27 @@ import (
 	"strings"
 	"time"
 
-	"github.com/frapposelli/nocino/pkg/gif"
-	"github.com/frapposelli/nocino/pkg/markov"
+	"github.com/kipters/nocino/pkg/sticker"
+
+	"github.com/kipters/nocino/pkg/gif"
+	"github.com/kipters/nocino/pkg/markov"
 
 	"github.com/sirupsen/logrus"
 	"gopkg.in/telegram-bot-api.v4"
 )
 
 type Nocino struct {
-	API         *tgbotapi.BotAPI
-	BotUsername string
-	Numw        int
-	Plen        int
-	GIFmaxsize  int
-	TrustedMap  map[int]bool
-	Log         *logrus.Entry
+	API            *tgbotapi.BotAPI
+	BotUsername    string
+	Numw           int
+	Plen           int
+	GIFmaxsize     int
+	Stickermaxsize int
+	TrustedMap     map[int]bool
+	Log            *logrus.Entry
 }
 
-func NewNocino(tgtoken string, trustedIDs string, numw int, plen int, gifmaxsize int, logger *logrus.Logger) *Nocino {
+func NewNocino(tgtoken string, trustedIDs string, numw int, plen int, gifmaxsize int, stickermaxsize int, logger *logrus.Logger) *Nocino {
 	trustedMap := make(map[int]bool)
 	if trustedIDs != "" {
 		ids := strings.Split(trustedIDs, ",")
@@ -42,21 +45,23 @@ func NewNocino(tgtoken string, trustedIDs string, numw int, plen int, gifmaxsize
 	logfields.Infof("Authorized on account %s", botUsername)
 
 	return &Nocino{
-		API:         bot,
-		BotUsername: botUsername,
-		Numw:        numw,
-		Plen:        plen,
-		GIFmaxsize:  gifmaxsize,
-		TrustedMap:  trustedMap,
-		Log:         logfields,
+		API:            bot,
+		BotUsername:    botUsername,
+		Numw:           numw,
+		Plen:           plen,
+		GIFmaxsize:     gifmaxsize,
+		Stickermaxsize: stickermaxsize,
+		TrustedMap:     trustedMap,
+		Log:            logfields,
 	}
 }
 
-func (n *Nocino) RunStatsTicker(markov *markov.Chain, gifdb *gif.GIFDB) {
+func (n *Nocino) RunStatsTicker(markov *markov.Chain, gifdb *gif.GIFDB, stickerdb *sticker.STICKERDB) {
 	ticker := time.NewTicker(10 * time.Minute)
 	go func() {
 		for range ticker.C {
-			n.Log.Infof("Nocino Stats: %d Markov suffixes, %d GIF in Database", len(markov.Chain), len(gifdb.List))
+			n.Log.Infof("Nocino Stats: %d Markov suffixes, %d GIF in Database, %d stickers",
+				len(markov.Chain), len(gifdb.List), len(stickerdb.List))
 		}
 	}()
 }

@@ -6,35 +6,39 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipters/nocino/pkg/sticker"
+
 	"github.com/davecgh/go-spew/spew"
 
-	"github.com/frapposelli/nocino/pkg/gif"
-	"github.com/frapposelli/nocino/pkg/markov"
-	"github.com/frapposelli/nocino/pkg/nocino"
+	"github.com/kipters/nocino/pkg/gif"
+	"github.com/kipters/nocino/pkg/markov"
+	"github.com/kipters/nocino/pkg/nocino"
 	"github.com/sirupsen/logrus"
 	tgbotapi "gopkg.in/telegram-bot-api.v4"
 )
 
 type Handler struct {
-	nocino *nocino.Nocino
-	update tgbotapi.Update
-	markov *markov.Chain
-	gifdb  *gif.GIFDB
-	log    *logrus.Entry
+	nocino    *nocino.Nocino
+	update    tgbotapi.Update
+	markov    *markov.Chain
+	gifdb     *gif.GIFDB
+	stickerdb *sticker.STICKERDB
+	log       *logrus.Entry
 }
 
-func NewHandler(nocino *nocino.Nocino, update tgbotapi.Update, markov *markov.Chain, gifdb *gif.GIFDB) *Handler {
+func NewHandler(nocino *nocino.Nocino, update tgbotapi.Update, markov *markov.Chain, gifdb *gif.GIFDB, stickerdb *sticker.STICKERDB) *Handler {
 	loghandler := nocino.Log.WithFields(logrus.Fields{
 		"username":  update.Message.From.UserName,
 		"subsystem": "handler",
 	})
 
 	return &Handler{
-		nocino: nocino,
-		update: update,
-		markov: markov,
-		gifdb:  gifdb,
-		log:    loghandler,
+		nocino:    nocino,
+		update:    update,
+		markov:    markov,
+		gifdb:     gifdb,
+		stickerdb: stickerdb,
+		log:       loghandler,
 	}
 }
 
@@ -58,7 +62,14 @@ func (h *Handler) Handle() error {
 	defer h.saveMessage(tokens)
 
 	if answerRequired {
-		if dice := h.rollDice(); dice > 4 && len(h.gifdb.List) > 0 {
+		dice := h.rollDice()
+
+		if dice > 5 && len(h.stickerdb.List) > 0 {
+			h.nocino.API.Send(h.fetchSticker())
+			return nil
+		}
+
+		if dice > 4 && len(h.gifdb.List) > 0 {
 			h.nocino.API.Send(h.fetchGIF())
 			return nil
 		}
@@ -99,11 +110,29 @@ func (h *Handler) fetchGIF() tgbotapi.Chattable {
 	return msg
 }
 
+func (h *Handler) fetchSticker() tgbotapi.Chattable {
+	stickerpick := fmt.Sprintf("%s/%s", h.stickerdb.Store, h.stickerdb.GetRandom())
+	h.log.Infof("Sending sticker: %s", stickerpick)
+	msg := tgbotapi.NewDocumentUpload(h.update.Message.Chat.ID, stickerpick)
+	msg.ReplyToMessageID = h.update.Message.MessageID
+
+	return msg
+}
+
 func (h *Handler) saveMessage(tokens []string) {
 	if len(tokens) > 0 {
 		// add message to chain
 		h.log.Debugf("Saving tokens to Chain '%v'", tokens)
 		h.markov.AddChain(strings.Join(tokens, " "))
+	}
+
+	if h.update.Message.Sticker != nil && h.update.Message.Sticker.FileSize < h.nocino.Stickermaxsize {
+		if err := h.stickerdb.Hoard(h.update, h.nocino.API); err != nil {
+			h.log.Errorf("Could not save sticker due to error '%s'", err)
+			return
+		}
+		h.log.Debugf("Saving sticker to DB '%s'", h.update.Message.Sticker.FileID)
+		h.stickerdb.Add(fmt.Sprintf("%s.webm", h.update.Message.Sticker.FileID))
 	}
 
 	if h.update.Message.Document != nil && (h.update.Message.Document.MimeType == "video/mp4" && h.update.Message.Document.FileSize < h.nocino.GIFmaxsize) {

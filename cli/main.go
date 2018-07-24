@@ -9,31 +9,36 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipters/nocino/pkg/sticker"
+
 	"github.com/jamiealquiza/envy"
 	"github.com/sirupsen/logrus"
 	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 	"gopkg.in/telegram-bot-api.v4"
 
-	"github.com/frapposelli/nocino/pkg/gif"
-	"github.com/frapposelli/nocino/pkg/handler"
-	"github.com/frapposelli/nocino/pkg/markov"
-	"github.com/frapposelli/nocino/pkg/nocino"
+	"github.com/kipters/nocino/pkg/gif"
+	"github.com/kipters/nocino/pkg/handler"
+	"github.com/kipters/nocino/pkg/markov"
+	"github.com/kipters/nocino/pkg/nocino"
 )
 
 var (
-	numw       int
-	plen       int
-	tgtoken    string
-	state      string
-	trustedIDs string
-	gifstore   string
-	gifmaxsize int
-	checkpoint time.Duration
-	mchain     *markov.Chain
-	gifdb      *gif.GIFDB
-	debug      bool
-	version    = "dev"
-	date       = "unknown"
+	numw           int
+	plen           int
+	tgtoken        string
+	state          string
+	trustedIDs     string
+	gifstore       string
+	gifmaxsize     int
+	stickerstore   string
+	stickermaxsize int
+	checkpoint     time.Duration
+	mchain         *markov.Chain
+	gifdb          *gif.GIFDB
+	stickerdb      *sticker.STICKERDB
+	debug          bool
+	version        = "dev"
+	date           = "unknown"
 )
 
 const banner = `  [~]
@@ -67,6 +72,8 @@ func init() {
 	flag.StringVar(&tgtoken, "token", "", "telegram bot token")
 	flag.StringVar(&gifstore, "gifstore", fmt.Sprintf("%s/gifs", filepath.Dir(exe)), "path to store GIFs")
 	flag.IntVar(&gifmaxsize, "gifmax", 1048576, "max GIF size in bytes")
+	flag.StringVar(&stickerstore, "stickerstore", fmt.Sprintf("%s/stickers", filepath.Dir(exe)), "path to store stickers")
+	flag.IntVar(&stickermaxsize, "stickermax", 1048576, "max sticker size in bytes")
 	flag.StringVar(&trustedIDs, "trustedids", "", "trusted ids separated by comma")
 	flag.DurationVar(&checkpoint, "checkpoint", 60*time.Second, "checkpoint interval for state file in seconds")
 	flag.BoolVar(&debug, "debug", false, "print debug")
@@ -98,8 +105,11 @@ func main() {
 	gifdb = gif.NewGIFDB(gifstore, log)
 	gifdb.ReadList()
 
-	n := nocino.NewNocino(tgtoken, trustedIDs, numw, plen, gifmaxsize, log)
-	n.RunStatsTicker(mchain, gifdb)
+	stickerdb = sticker.NewSTICKERDB(stickerstore, log)
+	stickerdb.ReadList()
+
+	n := nocino.NewNocino(tgtoken, trustedIDs, numw, plen, gifmaxsize, stickermaxsize, log)
+	n.RunStatsTicker(mchain, gifdb, stickerdb)
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
@@ -112,11 +122,11 @@ func main() {
 	for update := range updates {
 		// handle update
 		go func(update tgbotapi.Update) {
-			if update.Message == nil || (update.Message.Text == "" && update.Message.Document == nil) {
+			if update.Message == nil || (update.Message.Text == "" && update.Message.Document == nil && update.Message.Sticker == nil) {
 				return
 			}
 
-			h := handler.NewHandler(n, update, mchain, gifdb)
+			h := handler.NewHandler(n, update, mchain, gifdb, stickerdb)
 			if err := h.Handle(); err != nil {
 				n.Log.Errorf("Error when handling incoming message: '%s'", err.Error())
 			}
