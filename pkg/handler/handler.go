@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
-	"time"
 
 	"github.com/kipters/nocino/pkg/sticker"
 
@@ -85,9 +84,10 @@ func (h *Handler) Handle() error {
 }
 
 func (h *Handler) rollDice() int {
-	dice := []int{1, 2, 3, 4, 5, 6}
-	rand.Seed(time.Now().UnixNano())
-	return dice[rand.Intn(len(dice)-1)]
+	// dice := []int{1, 2, 3, 4, 5, 6}
+	// rand.Seed(time.Now().UnixNano())
+	// return dice[rand.Intn(len(dice)-1)]
+	return rand.Intn(6) + 1
 }
 
 func (h *Handler) genText() tgbotapi.Chattable {
@@ -132,7 +132,7 @@ func (h *Handler) saveMessage(tokens []string) {
 			return
 		}
 		h.log.Debugf("Saving sticker to DB '%s'", h.update.Message.Sticker.FileID)
-		h.stickerdb.Add(fmt.Sprintf("%s.webm", h.update.Message.Sticker.FileID))
+		h.stickerdb.Add(fmt.Sprintf("%s.webp", h.update.Message.Sticker.FileID))
 	}
 
 	if h.update.Message.Document != nil && (h.update.Message.Document.MimeType == "video/mp4" && h.update.Message.Document.FileSize < h.nocino.GIFmaxsize) {
